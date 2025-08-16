@@ -5,11 +5,22 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const app = express();
 const port = process.env.PORT || 3000;
 
+// !Middleware
 app.use(cors());
 app.use(express.json());
 
+// !MongoDB and Firebase Admin SDK setup
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.shp35fl.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+
+// !Firebase Admin SDK initialization
+const admin = require("firebase-admin");
+
+const serviceAccount = require("./ServiceAccountKey.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -19,6 +30,23 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+
+const TokenVerification = async (req, res, next) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  const auth = req.headers?.authorization;
+
+  if (!token || !auth || !auth.startsWith("Bearer ")) {
+    return res.status(401).send({ error: "Unauthorized access" });
+  }
+
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(token);
+    req.user = decodedToken; // !Attach the decoded token to the request object
+    next();
+  } catch (error) {
+    return res.status(401).send({ error: "Unauthorized access" });
+  }
+};
 
 async function run() {
   try {
@@ -56,8 +84,13 @@ async function run() {
     });
 
     // Fecthing tasks by email
-    app.get("/addtask/email/:email", async (req, res) => {
+    app.get("/addtask/email/:email", TokenVerification, async (req, res) => {
       const email = req.params.email;
+
+      if (email !== req.user.email) {
+        return res.status(403).send({ error: "Forbidden access" });
+      }
+
       const query = { buyer_email: email };
       const cursor = taskCollection.find(query);
       const result = await cursor.toArray();
@@ -73,8 +106,13 @@ async function run() {
     });
 
     // !!Worker individual
-    app.get("/allworkers/:email", async (req, res) => {
+    app.get("/allworkers/:email", TokenVerification, async (req, res) => {
       const { email } = req.params;
+
+      if (email !== req.user.email) {
+        return res.status(403).send({ error: "Forbidden access" });
+      }
+
       const query = { email: email };
       const cursor = workersCollection.find(query);
       const result = await cursor.toArray();
@@ -103,8 +141,13 @@ async function run() {
     });
 
     // !buyer indivisual
-    app.get("/allbuyers/:email", async (req, res) => {
+    app.get("/allbuyers/:email", TokenVerification, async (req, res) => {
       const Email = req.params.email;
+
+      if (Email !== req.user.email) {
+        return res.status(403).send({ error: "Forbidden access" });
+      }
+
       const query = { email: Email };
       const cursor = buyersCollection.find(query);
       const result = await cursor.toArray();
@@ -120,8 +163,13 @@ async function run() {
     });
 
     // !For Admin indivisual
-    app.get("/alladmins/:email", async (req, res) => {
+    app.get("/alladmins/:email", TokenVerification, async (req, res) => {
       const Email = req.params.email;
+
+      if (Email !== req.user.email) {
+        return res.status(403).send({ error: "Forbidden access" });
+      }
+
       const query = { email: Email };
       const cursor = adminsCollection.find(query);
       const result = await cursor.toArray();
@@ -145,8 +193,13 @@ async function run() {
     });
 
     // !Getting individual payment history
-    app.get("/payments/:email", async (req, res) => {
+    app.get("/payments/:email", TokenVerification, async (req, res) => {
       const Email = req.params.email;
+
+      if (Email !== req.user.email) {
+        return res.status(403).send({ error: "Forbidden access" });
+      }
+
       const query = { useremail: Email };
       const cursor = paymentsCollection.find(query);
       const result = await cursor.toArray();
@@ -177,9 +230,13 @@ async function run() {
     });
 
     // !Worker's individual submissions
-    app.get("/submissions/:email", async (req, res) => {
+    app.get("/submissions/:email", TokenVerification, async (req, res) => {
       try {
         const { email } = req.params;
+
+        if (email !== req.user.email) {
+          return res.status(403).send({ error: "Forbidden access" });
+        }
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 5;
         const skip = (page - 1) * limit;
@@ -328,8 +385,13 @@ async function run() {
       }
     });
 
-    app.patch("/allbuyers/:email", async (req, res) => {
+    app.patch("/allbuyers/:email", TokenVerification, async (req, res) => {
       const email = req.params.email;
+
+      if (email !== req.user.email) {
+        return res.status(403).send({ error: "Forbidden access" });
+      }
+
       const updatedData = req.body;
       const filter = { email: email };
       const updateDoc = {
@@ -340,9 +402,13 @@ async function run() {
     });
 
     // !Incrementing coins for registered users after a successful payment
-    app.patch("/buyer/:email", async (req, res) => {
+    app.patch("/buyer/:email", TokenVerification, async (req, res) => {
       const email = req.params.email;
       const { incrementBy } = req.body;
+
+      if (email !== req.user.email) {
+        return res.status(403).send({ error: "Forbidden access" });
+      }
 
       try {
         const result = await buyersCollection.updateOne(
@@ -368,9 +434,13 @@ async function run() {
     });
 
     // !Increasing coins for workers after a successful approval by client
-    app.patch("/allworkers/:email", async (req, res) => {
+    app.patch("/allworkers/:email", TokenVerification, async (req, res) => {
       const email = req.params.email;
       const { add } = req.body;
+
+      if (email !== req.user.email) {
+        return res.status(403).send({ error: "Forbidden access" });
+      }
 
       try {
         const result = await workersCollection.updateOne(
@@ -414,9 +484,13 @@ async function run() {
     });
 
     // !Decrementing coins of registered users after approval
-    app.patch("/buyer/approve/:email", async (req, res) => {
+    app.patch("/buyer/approve/:email", TokenVerification, async (req, res) => {
       const email = req.params.email;
       const { dec } = req.body;
+
+      if (email !== req.user.email) {
+        return res.status(403).send({ error: "Forbidden access" });
+      }
 
       try {
         const result = await buyersCollection.updateOne(
@@ -430,7 +504,7 @@ async function run() {
     });
 
     // !Decrementing coins of worker after withdrawal
-    app.patch("/worker/:email", async (req, res) => {
+    app.patch("/worker/:email", TokenVerification, async (req, res) => {
       const email = req.params.email;
       const { dec } = req.body;
 
