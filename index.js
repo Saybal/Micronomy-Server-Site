@@ -57,12 +57,8 @@ async function run() {
     const taskCollection = client.db("Micronomy").collection("AddTask");
     const coinsCollection = client.db("Micronomy").collection("coins");
     const paymentsCollection = client.db("Micronomy").collection("payments");
-    const notificationsCollection = client
-      .db("Micronomy")
-      .collection("Notifications");
-    const workersSubmissions = client
-      .db("Micronomy")
-      .collection("Workers_Submissions");
+    const notificationsCollection = client.db("Micronomy").collection("Notifications");
+    const workersSubmissions = client.db("Micronomy").collection("Workers_Submissions");
     const withdraw = client.db("Micronomy").collection("Withdraw");
     const clients = client.db("Micronomy").collection("Clients");
 
@@ -324,6 +320,22 @@ async function run() {
         }
 
         const result = await workersSubmissions.insertOne(submission);
+        res.status(201).json({
+          message: "Submission stored successfully",
+          insertedId: result.insertedId,
+        });
+      } catch (error) {
+        console.error("Error storing submission:", error);
+        res.status(500).json({ message: "Internal server error" });
+      }
+    });
+
+    // !Storing notifications
+    app.post("/notifications", async (req, res) => {
+      try {
+        const submission = req.body;
+
+        const result = await notificationsCollection.insertOne(submission);
         res.status(201).json({
           message: "Submission stored successfully",
           insertedId: result.insertedId,
